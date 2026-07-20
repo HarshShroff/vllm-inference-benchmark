@@ -1,0 +1,6 @@
+vllm>=0.6.0
+transformers>=4.44.0
+torch>=2.3.0
+numpy>=1.26.0
+pandas>=2.2.0
+matplotlib>=3.9.0
