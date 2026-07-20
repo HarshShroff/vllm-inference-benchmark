@@ -1,7 +1,7 @@
 # vLLM Inference Benchmark: Throughput & Memory vs. Naive HF Serving
 
 A benchmark that answers a specific, practical question: how much do you actually gain by
-serving an LLM with [vLLM](https://github.com/HarshShroff/vllm-inference-benchmark)'s continuous batching and
+serving an LLM with [vLLM](https://github.com/vllm-project/vllm)'s continuous batching and
 PagedAttention, instead of the naive `model.generate()` loop most people reach for first?
 
 The short answer: **a consistent 1.6-2.2x throughput improvement**, on prompts where both
