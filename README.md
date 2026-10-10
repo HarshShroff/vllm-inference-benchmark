@@ -21,7 +21,8 @@ that claim on faith.
 **Scope, stated precisely:** this compares vLLM's continuous-batching engine against naive,
 unbatched HuggingFace `.generate()` calls, on a single GPU, with a single model instance, no
 quantization. It says nothing about vLLM versus other serving engines (TGI, TensorRT-LLM,
-SGLang), and nothing about multi-GPU or tensor/pipeline parallelism. The claim under test is
+SGLang; an SGLang baseline is wired up but not yet run, see below), and nothing about
+multi-GPU or tensor/pipeline parallelism. The claim under test is
 narrow and defensible: *vLLM's scheduling and memory management beat the naive unbatched
 approach under these conditions* — not "vLLM is the fastest engine that exists."
 
@@ -95,6 +96,42 @@ python benchmark_baseline.py --model Qwen/Qwen2.5-3B-Instruct --output results/b
 python analyze_results.py --vllm results/vllm_results.json --baseline results/baseline_results.json
 ```
 
+## SGLang baseline (pending run)
+
+A third engine, [SGLang](https://github.com/sgl-project/sglang), is set up but **has not been
+run yet, so there are no SGLang numbers in this repo**. They will be added after a GPU run;
+none are estimated or carried over from elsewhere.
+
+- **Method.** `benchmark_sglang.py` uses SGLang's offline `sglang.Engine` (no HTTP server in
+  the measured path) and mirrors `benchmark_vllm.py`: same `prompts.py`, batch sizes 1-32,
+  `max_new_tokens=256`, `temperature=0.7`, `top_p=1.0`, seed 42, same output schema, written
+  to `results/sglang_results.json`. Every engine now records `tokens_per_request`, and the
+  summary flags which cells generated equal total tokens across all three engines, so
+  throughput is only compared on equal work (the Finding 2 lesson).
+- **Version / GPU.** Current SGLang needs sm80+ (Ampere); the T4 is sm75. The repo pins
+  `sglang==0.4.6.post5` (torch 2.6, triton 3.2, sm75 kernels), the newest release expected to
+  run on a T4, with SGLang's documented Triton-attention / PyTorch-sampling fallback for
+  Turing. If that fails, an L4 or A10 with a current SGLang is the fallback, and then vLLM and
+  the baseline have to be re-run on the same card. Reasons and sources are in
+  [`requirements-sglang.txt`](requirements-sglang.txt).
+- **Measured differently, on purpose.** SGLang runs the model in a separate scheduler
+  process, so peak memory comes from NVML (device-level, includes the CUDA context) rather than
+  `torch.cuda.max_memory_allocated()`. TTFB comes from a separate streaming pass, so it never
+  touches the throughput number. The pinned SGLang has only an engine-wide seed, not a
+  per-request one.
+- **Run it.** Open [`SGLang_Baseline.ipynb`](SGLang_Baseline.ipynb) on a Colab T4, or in a
+  separate environment from vLLM:
+
+```bash
+pip install -r requirements-sglang.txt
+python benchmark_sglang.py --model Qwen/Qwen2.5-3B-Instruct --output results/sglang_results.json
+python analyze_results.py   # picks up results/sglang_results.json automatically when present
+```
+
+`analyze_results.py` adds SGLang as a third series to both plots and to the summary table
+when that file exists, and falls back to the two-engine output when it does not. GPU-free
+checks: `pip install pytest pandas matplotlib numpy && python -m pytest tests/`.
+
 ## Project structure
 
 ```
@@ -102,9 +139,13 @@ vllm-inference-benchmark/
 ├── vLLM_vs_Naive_HF_Benchmark.ipynb   Colab notebook — the primary path for these results
 ├── benchmark_vllm.py                  standalone vLLM engine benchmark harness
 ├── benchmark_baseline.py              standalone naive HF transformers.generate() baseline
+├── benchmark_sglang.py                SGLang offline-Engine benchmark (third engine, pending run)
+├── SGLang_Baseline.ipynb              Colab notebook for the SGLang run (T4, pinned 0.4.6.post5)
 ├── prompts.py                         fixed short/medium/long prompt set, for reproducibility
 ├── analyze_results.py                 comparison plots + markdown summary report
 ├── requirements.txt
+├── requirements-sglang.txt            separate env for SGLang (different torch pin)
+├── tests/                             GPU-free checks: results schema, 2- and 3-engine analysis
 ├── results/
 │   ├── vllm_results.json / baseline_results.json   raw benchmark output
 │   ├── SUMMARY.md                     per-batch throughput and memory tables
@@ -114,6 +155,7 @@ vllm-inference-benchmark/
 
 ## Status
 
-Complete. Results generated on a Google Colab T4 running `Qwen/Qwen2.5-3B-Instruct`. Read
+vLLM vs. naive HF: complete. SGLang baseline: code and notebook ready, GPU run pending.
+Results generated on a Google Colab T4 running `Qwen/Qwen2.5-3B-Instruct`. Read
 [`results/RESULTS.md`](results/RESULTS.md) for the full analysis, or
 [`results/SUMMARY.md`](results/SUMMARY.md) for the raw per-batch numbers.

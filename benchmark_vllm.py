@@ -12,7 +12,7 @@ Usage:
 import argparse
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 import numpy as np
 import torch
@@ -37,6 +37,7 @@ class RunResult:
     ttfb_p99_ms: float
     per_token_latency_p50_ms: float
     peak_gpu_mem_gb: float
+    tokens_per_request: list[int] = field(default_factory=list)
 
 
 def run_vllm_benchmark(model_name: str, seed: int = 42) -> list[RunResult]:
@@ -65,7 +66,8 @@ def run_vllm_benchmark(model_name: str, seed: int = 42) -> list[RunResult]:
             torch.cuda.synchronize()
             elapsed = time.perf_counter() - start
 
-            total_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
+            tokens_per_request = [len(o.outputs[0].token_ids) for o in outputs]
+            total_tokens = sum(tokens_per_request)
             peak_mem_gb = torch.cuda.max_memory_allocated() / (1024**3)
 
             # vLLM RequestOutput exposes .metrics with first_token_time /
@@ -92,6 +94,7 @@ def run_vllm_benchmark(model_name: str, seed: int = 42) -> list[RunResult]:
                 ttfb_p99_ms=round(float(np.percentile(ttfbs_ms, 99)), 2),
                 per_token_latency_p50_ms=round(per_token_ms, 3),
                 peak_gpu_mem_gb=round(peak_mem_gb, 2),
+                tokens_per_request=tokens_per_request,
             )
             results.append(result)
             print(

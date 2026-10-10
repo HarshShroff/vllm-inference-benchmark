@@ -1,0 +1,28 @@
+# SGLang baseline (benchmark_sglang.py). Install in a SEPARATE environment from
+# requirements.txt: SGLang and vLLM pin different torch versions.
+#
+# Why 0.4.6.post5, not the latest SGLang:
+#   - Current SGLang requires sm80+ (Ampere). The docs moved the minimum from
+#     sm75 to sm80 (sgl-project/sglang#24336), sgl-kernel stopped building sm75
+#     in Aug 2025 (#9207), and recent releases fail on T4 with "no kernel image
+#     is available for execution on the device" (#24224, #24302).
+#   - 0.4.7 through 0.4.10 still shipped sm75 kernels but moved to torch 2.7.1 /
+#     triton 3.3.x, which has an fp16 codegen bug on compute capability < 8.0
+#     ("Unsupported conversion from f16 to f16", #7467, reproduced on a Colab T4).
+#   - 0.4.6.post5 is the newest release on torch 2.6.0 / triton 3.2.0 whose
+#     sgl-kernel (0.1.4) is compiled for sm_75. That makes it the newest version
+#     expected to run on a T4. It supports the Qwen2 architecture (Qwen2.5).
+#   Not yet verified on a real T4 run; see README "SGLang baseline (pending run)".
+#   On an L4 / A10 / A100 (sm80+) you can use a current SGLang instead, and the
+#   script's sm<80 Triton/PyTorch backend fallback will not trigger.
+
+--extra-index-url https://flashinfer.ai/whl/cu124/torch2.6/
+sglang[all]==0.4.6.post5
+sgl-kernel==0.1.4
+flashinfer-python==0.2.5
+torch==2.6.0
+transformers==4.51.1
+nvidia-ml-py>=12.535.0
+numpy>=1.26.0
+pandas>=2.2.0
+matplotlib>=3.9.0

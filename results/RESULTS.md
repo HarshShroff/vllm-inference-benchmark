@@ -79,6 +79,40 @@ handling variable, unpredictable concurrent load, vLLM's flat footprint is the i
 tradeoff — you pay the memory cost once and get consistent headroom, rather than risking
 OOM under unexpected load spikes the way an on-demand allocator would.
 
+## SGLang baseline (pending run)
+
+No SGLang numbers yet. This section gets filled in after a GPU run, not before.
+
+**Method.** `benchmark_sglang.py` drives SGLang's offline `sglang.Engine` with the same
+workload as the vLLM run: same fixed prompts, batch sizes 1/4/8/16/32 across short/medium/long,
+`max_new_tokens=256`, `temperature=0.7`, `top_p=1.0`, seed 42, fp16, and
+`mem_fraction_static=0.85` to match `gpu_memory_utilization=0.85`. Throughput is timed on one
+non-streaming batched `generate` call per cell, the same shape as `llm.generate` in the vLLM
+script. Per-request token counts are recorded for all three engines, and the summary table
+marks which cells produced equal total tokens across engines; only those are an equal-work
+comparison, which is the lesson from Finding 2.
+
+**What differs and why.**
+- *Version.* SGLang raised its minimum GPU to sm80, and the T4 is sm75. The run pins
+  `sglang==0.4.6.post5`, the newest release on torch 2.6 / triton 3.2 that still ships sm75
+  kernels (0.4.7+ hit a triton 3.3 fp16 bug on pre-Ampere cards). On sm75 the script uses the
+  Triton attention and PyTorch sampling backends, SGLang's documented fallback for T4. If the
+  T4 run fails anyway, the fallback is an L4/A10 with all three engines re-run on that card.
+- *Memory.* SGLang's model lives in a separate scheduler process, so peak memory is NVML
+  device-used memory, which includes the CUDA context. Expect it to sit a few hundred MB above
+  a torch-allocator reading for the same footprint. Like vLLM, SGLang reserves its KV pool
+  upfront, so Finding 3's "flat line" framing should apply here too, but that's a prediction
+  until measured.
+- *Seed.* The pinned version has an engine-wide `random_seed`, not a per-request seed, so
+  SGLang is reproducible run-to-run but will not reproduce vLLM's exact samples. Token counts
+  may diverge on short prompts for the same reason as Finding 2.
+- *TTFB.* Measured client-side in a separate streaming pass over the same batch, so streaming
+  overhead never enters the throughput figure.
+
+**Comparability caveat.** The committed vLLM and baseline results came from an earlier T4
+session. A new SGLang run on another T4 session is the same hardware class, but session-level
+variance is real; small gaps (a few percent) should not be read as engine differences.
+
 ## Limitations
 
 - Single-GPU (T4) only; no tensor parallelism or multi-GPU serving tested.
