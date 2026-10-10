@@ -13,7 +13,7 @@ Usage:
 import argparse
 import json
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 import numpy as np
 import torch
@@ -36,6 +36,7 @@ class RunResult:
     throughput_tokens_per_sec: float
     ttfb_p50_ms: float
     peak_gpu_mem_gb: float
+    tokens_per_request: list[int] = field(default_factory=list)
 
 
 def run_baseline_benchmark(model_name: str, seed: int = 42) -> list[RunResult]:
@@ -86,7 +87,8 @@ def run_baseline_benchmark(model_name: str, seed: int = 42) -> list[RunResult]:
             elapsed = time.perf_counter() - ttfb_start
 
             new_tokens = output_ids[:, inputs["input_ids"].shape[1]:]
-            total_tokens = int((new_tokens != tokenizer.pad_token_id).sum().item())
+            tokens_per_request = (new_tokens != tokenizer.pad_token_id).sum(dim=1).tolist()
+            total_tokens = int(sum(tokens_per_request))
             peak_mem_gb = torch.cuda.max_memory_allocated() / (1024**3)
 
             # No true per-request TTFB without streaming; approximate as
@@ -102,6 +104,7 @@ def run_baseline_benchmark(model_name: str, seed: int = 42) -> list[RunResult]:
                 throughput_tokens_per_sec=round(total_tokens / elapsed, 2),
                 ttfb_p50_ms=round(approx_ttfb_ms, 2),
                 peak_gpu_mem_gb=round(peak_mem_gb, 2),
+                tokens_per_request=tokens_per_request,
             )
             results.append(result)
             print(
